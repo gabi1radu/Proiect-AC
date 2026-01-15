@@ -1,104 +1,93 @@
+`default_nettype none
+
 module top(
-    // peripheral clock signals
-    input clk,
-    input rst_n,
-    // SPI master facing signals
-    input sclk,
-    input cs_n,
-    input miso,
-    output mosi,
-    // peripheral signals
-    output pwm_out
+    input  wire clk,
+    input  wire rst_n,
+
+    // SPI (naming follows the testbench wiring)
+    input  wire sclk,
+    input  wire cs_n,
+    input  wire miso,      // TB drives this with its MOSI
+    output wire mosi,      // TB reads this as MISO
+
+    output wire pwm_out
 );
 
-wire byte_sync;
-wire[7:0] data_in;
-wire[7:0] data_out;
-wire read;
-wire write;
-wire[5:0] addr;
-wire[7:0] data_read;
-wire[7:0] data_write;
+    // SPI <-> regfile signals
+    wire [5:0] rd_addr;
+    wire [7:0] rd_data;
+    wire [5:0] wr_addr;
+    wire [7:0] wr_data;
+    wire       wr_toggle;
 
-wire[15:0] counter_val;
-wire[15:0] period;
-wire en;
-wire count_reset;
-wire upnotdown;
-wire[7:0] prescale;
+    // Reg outputs
+    wire [7:0] period;
+    wire       counter_en;
+    wire [7:0] compare1;
+    wire [7:0] compare2;
+    wire [7:0] prescale;
+    wire       upnotdown;
+    wire       pwm_en;
+    wire [1:0] functions;
+    wire       soft_reset_pulse;
 
-wire pwm_en;
-wire[7:0] functions;
-wire[15:0] compare1;
-wire[15:0] compare2;
+    wire [7:0] counter_val;
 
-spi_bridge i_spi_bridge (
-    .clk(clk),
-    .rst_n(rst_n),
-    .sclk(sclk),
-    .cs_n(cs_n),
-    .miso(miso),
-    .mosi(mosi),
-    .byte_sync(byte_sync),
-    .data_in(data_in),
-    .data_out(data_out)
-);
+    spi_bridge u_spi(
+        .rst_n     (rst_n),
+        .sclk      (sclk),
+        .cs_n      (cs_n),
+        .mosi_in   (miso),
+        .miso_out  (mosi),
+        .rd_addr   (rd_addr),
+        .rd_data   (rd_data),
+        .wr_addr   (wr_addr),
+        .wr_data   (wr_data),
+        .wr_toggle (wr_toggle)
+    );
 
-instr_dcd i_instr_dcd (
-    .clk(clk),
-    .rst_n(rst_n),
-    .byte_sync(byte_sync),
-    .data_in(data_in),
-    .data_out(data_out),
-    .read(read),
-    .write(write),
-    .addr(addr),
-    .data_read(data_read),
-    .data_write(data_write)
-);
+    regs u_regs(
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .wr_toggle        (wr_toggle),
+        .wr_addr          (wr_addr),
+        .wr_data          (wr_data),
+        .rd_addr          (rd_addr),
+        .rd_data          (rd_data),
+        .period           (period),
+        .counter_en       (counter_en),
+        .compare1         (compare1),
+        .compare2         (compare2),
+        .prescale         (prescale),
+        .upnotdown        (upnotdown),
+        .pwm_en           (pwm_en),
+        .functions        (functions),
+        .soft_reset_pulse (soft_reset_pulse),
+        .counter_val      (counter_val)
+    );
 
-regs i_regs (
-    .clk(clk),
-    .rst_n(rst_n),
-    .read(read),
-    .write(write),
-    .addr(addr),
-    .data_read(data_read),
-    .data_write(data_write),
-    .counter_val(counter_val),
-    .period(period),
-    .en(en),
-    .count_reset(count_reset),
-    .upnotdown(upnotdown),
-    .prescale(prescale),
-    .pwm_en(pwm_en),
-    .functions(functions),
-    .compare1(compare1),
-    .compare2(compare2)
-);
+    counter u_cnt(
+        .clk        (clk),
+        .rst_n      (rst_n),
+        .enable     (counter_en),
+        .period     (period),
+        .prescale   (prescale),
+        .upnotdown  (upnotdown),
+        .soft_reset (soft_reset_pulse),
+        .value      (counter_val)
+    );
 
-counter i_counter (
-    .clk(clk),
-    .rst_n(rst_n),
-    .count_val(counter_val),
-    .period(period),
-    .en(en),
-    .count_reset(count_reset),
-    .upnotdown(upnotdown),
-    .prescale(prescale)
-);
-
-pwm_gen i_pwm_gen (
-    .clk(clk),
-    .rst_n(rst_n),
-    .pwm_en(pwm_en),
-    .period(period),
-    .functions(functions),
-    .compare1(compare1),
-    .compare2(compare2),
-    .count_val(counter_val),
-    .pwm_out(pwm_out)
-);
+    pwm_gen u_pwm(
+        .pwm_en      (pwm_en),
+        .functions   (functions),
+        .period      (period),
+        .compare1    (compare1),
+        .compare2    (compare2),
+        .counter_val (counter_val),
+        .pwm_out     (pwm_out)
+    );
 
 endmodule
+
+`default_nettype wire
 
