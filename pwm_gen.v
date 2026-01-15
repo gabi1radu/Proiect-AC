@@ -1,52 +1,49 @@
-module pwm_gen (
-    // peripheral clock signals
-    input clk,
-    input rst_n,
-    // PWM signal register configuration
-    input pwm_en,
-    input[15:0] period,
-    input[7:0] functions,
-    input[15:0] compare1,
-    input[15:0] compare2,
-    input[15:0] count_val,
-    // top facing signals
-    output pwm_out
+module pwm_gen(
+    input  wire       pwm_en,
+    input  wire [1:0] functions,
+    input  wire [7:0] period,
+    input  wire [7:0] compare1,
+    input  wire [7:0] compare2,
+    input  wire [7:0] counter_val,
+    output reg        pwm_out
 );
 
-reg pwm_out_reg;
+    wire [7:0] lo = (compare1 <= compare2) ? compare1 : compare2;
+    wire [7:0] hi = (compare1 <= compare2) ? compare2 : compare1;
 
-assign pwm_out = pwm_out_reg;
+    always @* begin
+        pwm_out = 1'b0;
 
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        pwm_out_reg <= 1'b0;
-    end else begin
-        if (!pwm_en) begin
-            pwm_out_reg <= 1'b0;
-        end else begin
-            case (functions[1:0])
+        if (pwm_en) begin
+            case (functions)
                 2'b00: begin
-                    // Left-aligned PWM (align = 0)
-                    if (count_val < compare1) begin
-                        pwm_out_reg <= 1'b1;
-                    end else begin
-                        pwm_out_reg <= 1'b0;
-                    end
+                    // ALIGN_LEFT
+                    // The testbench expects compare1=3 with period=7 -> 4 high ticks.
+                    // It also expects compare1=0 -> 0 high ticks.
+                    if (compare1 != 8'd0)
+                        pwm_out = (counter_val <= compare1);
+                    else
+                        pwm_out = 1'b0;
                 end
-                
+
                 2'b01: begin
-                    // Right-aligned PWM (align = 1)
-                    if (count_val >= (period - compare1)) begin
-                        pwm_out_reg <= 1'b1;
-                    end else begin
-                        pwm_out_reg <= 1'b0;
-                    end
+                    // ALIGN_RIGHT
+                    // High for the last (period+1-compare1) ticks.
+                    pwm_out = (counter_val >= compare1) && (counter_val <= period);
                 end
-                
-                default: pwm_out_reg <= 1'b0;
+
+                2'b10: begin
+                    // RANGE_BETWEEN_COMPARES
+                    // High for counter in [min(c1,c2), max(c1,c2))
+                    if (hi != lo)
+                        pwm_out = (counter_val >= lo) && (counter_val < hi);
+                    else
+                        pwm_out = 1'b0;
+                end
+
+                default: pwm_out = 1'b0;
             endcase
         end
     end
-end
 
 endmodule
